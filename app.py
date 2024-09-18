@@ -7,7 +7,7 @@ import os
 import json
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:8002"}})
+CORS(app, resources={r"/*": {"origins": "http://localhost:8000"}})
 
 # SQLite Database Configuration
 basedir = os.path.abspath(os.path.dirname(__file__))
