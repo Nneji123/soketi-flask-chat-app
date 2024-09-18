@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Chat Application</title>
+    <script src="https://js.pusher.com/7.0/pusher.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --primary-color: #000000;
+            --secondary-color: #f5f5f5;
+            --border-color: #e0e0e0;
+            --hover-color: #f0f0f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        #chat-messages {
+            height: 350px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow-y: scroll;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background-color: var(--secondary-color);
+        }
+
+        #message-form {
+            margin-top: auto;
+            /* Pushes the form to the bottom */
+        }
+
+        #register-form {
+            display: flex;
+            margin-bottom: 1rem;
+            gap: 0.5rem;
+        }
+
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            background-color: var(--primary-color);
+            color: var(--bg-color);
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: var(--text-color);
+        }
+
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 450px;
+            /* Adjust as needed */
+        }
+
+        #typing-indicator {
+            font-style: italic;
+            color: #888;
+            margin-bottom: 0.5rem;
+            min-height: 1.2em;
+            /* Ensures consistent spacing even when empty */
+        }
+
+        .user-status {
+            font-style: italic;
+            color: #888;
+            margin-bottom: 0.5rem;
+        }
+
+        .profile-pic {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .message {
+            background-color: var(--bg-color);
+            border-radius: 8px;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+
+        .message-username {
+            font-weight: 600;
+            margin-right: 0.5rem;
+        }
+
+        .message-timestamp {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        #typing-indicator {
+            font-style: italic;
+            color: #888;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Advanced Chat Application</h1>
+    <div id="register-container">
+        <form id="register-form">
+            <input type="text" id="username-input" placeholder="Enter your username" required aria-label="Username">
+            <input type="text" id="profile-pic-input" placeholder="Profile picture URL (optional)"
+                aria-label="Profile picture URL">
+            <button type="submit">Join Chat</button>
+        </form>
+    </div>
+    <div id="chat-container">
+        <div id="chat-messages" aria-live="polite"></div>
+        <div id="typing-indicator" aria-live="polite"></div>
+        <form id="message-form">
+            <input type="text" id="message-input" placeholder="Type a message..." required aria-label="Message">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script>
+        let currentUser = '';
+        let typingTimeout;
+        let client;
+        let channel;
+
+        document.getElementById('register-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const username = document.getElementById('username-input').value.trim();
+            const profilePic = document.getElementById('profile-pic-input').value.trim();
+
+            if (username) {
+                fetch('http://localhost:5000/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username, profile_pic: profilePic }),
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            currentUser = username;
+                            document.getElementById('register-container').style.display = 'none';
+                            document.getElementById('chat-container').style.display = 'block';
+                            document.getElementById('typing-indicator').style.display = 'block';
+                            initializePusher();
+                            loadMessages();
+                        } else {
+                            alert(data.message);
+                        }
+                    })
+                    .catch(error => console.error('Error registering:', error));
+            }
+        });
+
+        function initializePusher() {
+            client = new Pusher('iijdsjkanidnasqw9rqw', {
+                wsHost: '09d1-35-159-107-7.ngrok-free.app',
+                wsPort: 443,
+                forceTLS: true,
+                encrypted: true,
+                enabledTransports: ['ws', 'wss'],
+                authEndpoint: 'http://localhost:5000/pusher/auth',
+                auth: {
+                    params: {
+                        username: currentUser
+                    }
+                }
+            });
+
+            channel = client.subscribe('presence-chat');
+
+            channel.bind('pusher:subscription_succeeded', () => {
+                console.log('Successfully subscribed to channel');
+            });
+
+            channel.bind('new-message', (data) => {
+                displayMessage(data);
+            });
+
+            channel.bind('user-joined', (data) => {
+                const chatMessages = document.getElementById('chat-messages');
+                const messageElement = document.createElement('p');
+                messageElement.classList.add('user-status');
+                messageElement.textContent = `${data.username} has joined the chat.`;
+                chatMessages.appendChild(messageElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+
+            channel.bind('user-typing', (data) => {
+                const typingIndicator = document.getElementById('typing-indicator');
+                if (data.is_typing && data.username !== currentUser) {
+                    typingIndicator.textContent = `${data.username} is typing...`;
+                    typingIndicator.style.display = 'block';
+                } else {
+                    typingIndicator.textContent = '';
+                    typingIndicator.style.display = 'none';
+                }
+            });
+
+
+            channel.bind('user-status', (data) => {
+                const chatMessages = document.getElementById('chat-messages');
+                const statusElement = document.createElement('p');
+                statusElement.classList.add('user-status');
+                statusElement.textContent = `${data.username} is ${data.is_online ? 'online' : 'offline'}.`;
+                chatMessages.appendChild(statusElement);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        }
+
+        document.getElementById('message-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+            const messageInput = document.getElementById('message-input');
+            const message = messageInput.value.trim();
+
+            if (message) {
+                fetch('http://localhost:5000/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser, content: message }),
+                })
+                    .then(response => response.json())
+                    .then(data => console.log('Message sent:', data))
+                    .catch(error => console.error('Error sending message:', error));
+
+                // Clear the typing indicator
+                sendTypingStatus(false);
+                messageInput.value = '';
+            }
+        });
+
+        document.getElementById('message-input').addEventListener('input', function () {
+            clearTimeout(typingTimeout);
+            sendTypingStatus(true);
+
+            typingTimeout = setTimeout(() => {
+                sendTypingStatus(false);
+            }, 1000);
+        });
+
+        function sendTypingStatus(isTyping) {
+            fetch('http://localhost:5000/user-typing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: currentUser, is_typing: isTyping }),
+            })
+                .then(response => response.json())
+                .catch(error => console.error('Error updating typing status:', error));
+        }
+
+        function loadMessages() {
+            fetch('http://localhost:5000/get-messages')
+                .then(response => response.json())
+                .then(messages => {
+                    const chatMessages = document.getElementById('chat-messages');
+                    chatMessages.innerHTML = '';
+                    messages.forEach(displayMessage);
+                })
+                .catch(error => console.error('Error loading messages:', error));
+        }
+
+        function displayMessage(message) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+            messageElement.innerHTML = `
+        <div class="message-header">
+            <img src="${message.profile_pic || 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ4YreOWfDX3kK-QLAbAL4ufCPc84ol2MA8Xg&s'}" alt="${message.username}" class="profile-pic">
+            <span class="message-username">${message.username}</span>
+            <span class="message-timestamp">${timestamp}</span>
+        </div>
+        <div class="message-content">${message.content}</div>
+    `;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        window.addEventListener('beforeunload', function () {
+            if (currentUser) {
+                fetch('http://localhost:5000/user-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser, is_online: false }),
+                });
+            }
+        });
+
+        window.addEventListener('focus', function () {
+            if (currentUser) {
+                fetch('http://localhost:5000/user-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser, is_online: true }),
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>
