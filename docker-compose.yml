@@ -15,7 +15,7 @@ services:
   soketi:
     build:
       context: .
-      dockerfile: docker/Dockerfile.soketi
+      dockerfile: Dockerfile.soketi
     ports:
       - "6001:6001"  # Map WebSocket port
     environment:
