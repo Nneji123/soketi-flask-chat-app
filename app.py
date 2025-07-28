@@ -5,6 +5,9 @@ from flask_cors import CORS
 from datetime import datetime
 import os
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:8000"}})
@@ -17,11 +20,11 @@ db = SQLAlchemy(app)
 
 # Pusher Configuration
 pusher_client = Pusher(
-    app_id='4712912',
-    key='iijdsjkanidnasqw9rqw',
-    secret='jsnfaoicfoapjfjpqef',
-    host="09d1-35-159-107-7.ngrok-free.app",
-    port=443,
+    app_id=os.environ.get('PUSHER_APP_ID'),
+    key=os.environ.get("PUSHER_APP_KEY"),
+    secret=os.environ.get("PUSHER_APP_SECRET"),
+    host=os.environ.get("PUSHER_HOST"),
+    port=int(os.environ.get("PUSHER_PORT")),
     ssl=True,
 )
 
